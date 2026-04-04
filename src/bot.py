@@ -106,7 +106,7 @@ async def streak_warning():
 
     at_risk = wordle_service.get_at_risk_users()
 
-    db.set_meta("warning_sent_date", today_str)  # Mark as sent before posting to avoid duplicates
+    db.set_meta("warning_sent_date", today_str)  # Mark before posting to avoid duplicates on restart
 
     if not at_risk:
         return
