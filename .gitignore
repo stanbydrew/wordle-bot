@@ -1,6 +1,9 @@
 # Secrets
 .env
 
+# Ops
+OPS.md
+
 # Database
 wordle.db
 

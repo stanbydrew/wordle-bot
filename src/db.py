@@ -13,14 +13,15 @@ def _conn():
 def init_db():
     with _conn() as conn:
         conn.execute("""
-            CREATE TABLE IF NOT EXISTS wordle_results (
+            CREATE TABLE IF NOT EXISTS game_results (
                 user_id       TEXT NOT NULL,
                 username      TEXT NOT NULL,
+                game          TEXT NOT NULL DEFAULT 'wordle',
                 date          TEXT NOT NULL,
                 puzzle_number INTEGER NOT NULL,
                 attempts      INTEGER,
                 success       INTEGER NOT NULL,
-                PRIMARY KEY (user_id, date)
+                PRIMARY KEY (user_id, game, date)
             )
         """)
         conn.execute("""
@@ -29,6 +30,21 @@ def init_db():
                 value TEXT NOT NULL
             )
         """)
+
+        # Migrate old wordle_results table if it exists
+        tables = {
+            r[0] for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+        if "wordle_results" in tables:
+            conn.execute("""
+                INSERT OR IGNORE INTO game_results
+                    (user_id, username, game, date, puzzle_number, attempts, success)
+                SELECT user_id, username, 'wordle', date, puzzle_number, attempts, success
+                FROM wordle_results
+            """)
+            conn.execute("DROP TABLE wordle_results")
 
 
 # ── Meta ──────────────────────────────────────────────────────────────────────
@@ -61,70 +77,92 @@ def set_last_message_id(message_id: int):
 def store_result(
     user_id: str,
     username: str,
+    game: str,
     result_date: date,
     puzzle_number: int,
     attempts: int | None,
     success: bool,
 ) -> bool:
     """
-    Insert a Wordle result. Returns True if this was a new insert
-    (first result for this user today), False if the slot was already filled.
+    Insert a game result. Returns True if this was a new insert
+    (first result for this user/game today), False if the slot was already filled.
     On duplicate: only the username is updated, the original result is kept.
     """
     with _conn() as conn:
         cursor = conn.execute("""
-            INSERT OR IGNORE INTO wordle_results
-                (user_id, username, date, puzzle_number, attempts, success)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (user_id, username, result_date.isoformat(), puzzle_number, attempts, int(success)))
+            INSERT OR IGNORE INTO game_results
+                (user_id, username, game, date, puzzle_number, attempts, success)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (user_id, username, game, result_date.isoformat(), puzzle_number, attempts, int(success)))
 
         if cursor.rowcount == 1:
             return True
 
         # Duplicate — keep result, refresh username only
         conn.execute(
-            "UPDATE wordle_results SET username = ? WHERE user_id = ? AND date = ?",
-            (username, user_id, result_date.isoformat()),
+            "UPDATE game_results SET username = ? WHERE user_id = ? AND game = ? AND date = ?",
+            (username, user_id, game, result_date.isoformat()),
         )
         return False
 
 
-def get_all_users() -> list[tuple[str, str]]:
-    """Returns (user_id, username) for all users, using their most recent username."""
+def get_all_users(game: str) -> list[tuple[str, str]]:
+    """Returns (user_id, username) for all users who have played a game, using their most recent username."""
     with _conn() as conn:
         rows = conn.execute("""
-            SELECT wr.user_id, wr.username
-            FROM wordle_results wr
-            WHERE wr.date = (
-                SELECT MAX(date) FROM wordle_results WHERE user_id = wr.user_id
+            SELECT gr.user_id, gr.username
+            FROM game_results gr
+            WHERE gr.game = ?
+            AND gr.date = (
+                SELECT MAX(date) FROM game_results
+                WHERE user_id = gr.user_id AND game = ?
             )
-            GROUP BY wr.user_id
-        """).fetchall()
+            GROUP BY gr.user_id
+        """, (game, game)).fetchall()
     return [(r["user_id"], r["username"]) for r in rows]
 
 
-def get_successful_dates(user_id: str) -> set[date]:
+def get_successful_dates(user_id: str, game: str) -> set[date]:
     with _conn() as conn:
         rows = conn.execute("""
-            SELECT date FROM wordle_results
-            WHERE user_id = ? AND success = 1
-        """, (user_id,)).fetchall()
+            SELECT date FROM game_results
+            WHERE user_id = ? AND game = ? AND success = 1
+        """, (user_id, game)).fetchall()
     return {date.fromisoformat(r["date"]) for r in rows}
 
 
-def get_users_at_risk(yesterday: date, today: date) -> list[tuple[str, str]]:
+def get_game_counts(user_id: str, game: str) -> tuple[int, int]:
+    """Returns (total_games, total_wins) for a user in a specific game."""
+    with _conn() as conn:
+        row = conn.execute("""
+            SELECT COUNT(*) as total, SUM(success) as wins
+            FROM game_results WHERE user_id = ? AND game = ?
+        """, (user_id, game)).fetchone()
+    return (row["total"] or 0, row["wins"] or 0)
+
+
+def get_average_attempts(user_id: str, game: str) -> float | None:
+    with _conn() as conn:
+        row = conn.execute("""
+            SELECT AVG(attempts) FROM game_results
+            WHERE user_id = ? AND game = ? AND success = 1
+        """, (user_id, game)).fetchone()
+    return row[0] if row and row[0] is not None else None
+
+
+def get_users_at_risk(game: str, yesterday: date, today: date) -> list[tuple[str, str]]:
     """
     Returns (user_id, username) for users who completed yesterday (active streak)
     but have not completed today — their streak will break at midnight.
     """
     with _conn() as conn:
         rows = conn.execute("""
-            SELECT wr.user_id, wr.username
-            FROM wordle_results wr
-            WHERE wr.date = ? AND wr.success = 1
+            SELECT gr.user_id, gr.username
+            FROM game_results gr
+            WHERE gr.game = ? AND gr.date = ? AND gr.success = 1
             AND NOT EXISTS (
-                SELECT 1 FROM wordle_results
-                WHERE user_id = wr.user_id AND date = ? AND success = 1
+                SELECT 1 FROM game_results
+                WHERE user_id = gr.user_id AND game = ? AND date = ? AND success = 1
             )
-        """, (yesterday.isoformat(), today.isoformat())).fetchall()
+        """, (game, yesterday.isoformat(), game, today.isoformat())).fetchall()
     return [(r["user_id"], r["username"]) for r in rows]
