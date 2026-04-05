@@ -62,6 +62,7 @@ async def on_ready():
     db.init_db()
 
     for guild in client.guilds:
+        tree.clear_commands(guild=guild)
         await tree.sync(guild=guild)
     print(f"Logged in as {client.user} — slash commands synced.")
 
