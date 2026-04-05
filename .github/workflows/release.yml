@@ -1,0 +1,31 @@
+name: Release
+
+on:
+  release:
+    types:
+      - published
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+
+      - name: Build flake package
+        run: nix build .#default --print-build-logs
+
+      - name: Create release archive
+        run: tar -C result -czf wordle-bot-x86_64-linux.tar.gz .
+
+      - name: Upload release artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" wordle-bot-x86_64-linux.tar.gz --clobber
