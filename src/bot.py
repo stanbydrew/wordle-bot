@@ -15,6 +15,7 @@ load_dotenv()
 
 TZ = ZoneInfo(os.environ["TIMEZONE"])
 WORDLE_CHANNEL_ID = int(os.environ["WORDLE_CHANNEL_ID"])
+GUILD_ID = int(os.environ["GUILD_ID"])
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -61,9 +62,9 @@ async def on_message(message):
 async def on_ready():
     db.init_db()
 
-    for guild in client.guilds:
-        tree.clear_commands(guild=guild)
-        await tree.sync(guild=guild)
+    guild = discord.Object(id=GUILD_ID)
+    tree.copy_global_to(guild=guild)
+    await tree.sync(guild=guild)
     print(f"Logged in as {client.user} — slash commands synced.")
 
     channel = client.get_channel(WORDLE_CHANNEL_ID)
