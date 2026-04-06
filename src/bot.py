@@ -182,28 +182,20 @@ async def streak_warning():
         return
 
     today_str = now.date().isoformat()
-    sections = []
 
-    for config in games.ALL_GAMES:
-        meta_key = f"warning_sent_{config.key}"
-        if db.get_meta(meta_key) == today_str:
-            continue
-        db.set_meta(meta_key, today_str)
+    meta_key = "warning_sent_wordle"
+    if db.get_meta(meta_key) == today_str:
+        return
+    db.set_meta(meta_key, today_str)
 
-        at_risk = game_service.get_at_risk_users(config.key)
-        if not at_risk:
-            continue
-
-        mentions = " ".join(f"<@{uid}>" for uid, _ in at_risk)
-        sections.append(f"**{config.display_name}**: {mentions}")
-
-    if not sections:
+    at_risk = game_service.get_at_risk_users("wordle")
+    if not at_risk:
         return
 
-    body = "\n".join(sections)
+    mentions = " ".join(f"<@{uid}>" for uid, _ in at_risk)
     await channel.send(
-        f"⏰ **1 hour left to complete today's puzzles!**\n{body}\n"
-        f"Your streak is at risk — don't break the chain!"
+        f"⏰ **1 hour left to complete today's Wordle!**\n{mentions}\n"
+        f"Your Wordle streak is at risk — don't break the chain!"
     )
 
 
