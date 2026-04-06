@@ -48,16 +48,20 @@ async def on_message(message):
 
     results = game_service.process_message(message)
 
+    attempt_emojis = []
     any_stored = False
     any_duplicate = False
     for result, game_key, attempts in results:
         if result == game_service.ProcessResult.STORED:
             any_stored = True
             emoji = ATTEMPT_EMOJI.get(attempts, "🪦") if attempts is not None else "🪦"
-            await message.add_reaction(emoji)
+            if emoji not in attempt_emojis:
+                attempt_emojis.append(emoji)
         elif result == game_service.ProcessResult.DUPLICATE:
             any_duplicate = True
 
+    for emoji in attempt_emojis:
+        await message.add_reaction(emoji)
     if any_stored:
         await message.add_reaction("✅")
     if any_duplicate:
