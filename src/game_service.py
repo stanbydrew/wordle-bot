@@ -60,12 +60,15 @@ def parse_result(content: str, config: GameConfig) -> tuple[int, int | None, boo
             return None
         success = True
 
-    # Cross-validate with emoji grid
-    grid_lines = [
-        line.strip()
-        for line in content.splitlines()
-        if any(e in line for e in config.grid_emojis)
-    ]
+    # Cross-validate with emoji grid — only scan lines after the header match
+    # to avoid picking up grid rows from other games in the same message.
+    grid_lines = []
+    for line in content[match.end():].splitlines():
+        stripped = line.strip()
+        if any(e in stripped for e in config.grid_emojis):
+            grid_lines.append(stripped)
+        elif grid_lines:
+            break  # stop at first non-grid line after grid has started
     if grid_lines:
         # Each row must have exactly grid_width cells
         if any(
@@ -89,46 +92,51 @@ def parse_result(content: str, config: GameConfig) -> tuple[int, int | None, boo
     return puzzle_number, attempts, success
 
 
-def detect_game(content: str) -> tuple[GameConfig, int, int | None, bool] | None:
-    """Try all game configs in order, return first match."""
-    for config in games.ALL_GAMES:
-        result = parse_result(content, config)
-        if result is not None:
-            return (config, *result)
-    return None
+def detect_all_games(content: str) -> list[tuple[GameConfig, int, int | None, bool]]:
+    """Try all game configs, return all matches found in the message."""
+    return [
+        (config, *result)
+        for config in games.ALL_GAMES
+        if (result := parse_result(content, config)) is not None
+    ]
 
 
 # ── Core logic ────────────────────────────────────────────────────────────────
 
-def process_message(message) -> tuple[ProcessResult, str | None, int | None]:
+def process_message(message) -> list[tuple[ProcessResult, str | None, int | None]]:
     """
-    Detect, validate and store a game result from a Discord message.
-    Returns (ProcessResult, game_key, attempts).
-    game_key and attempts are None when IGNORED.
+    Detect, validate and store all game results from a Discord message.
+    Returns a list of (ProcessResult, game_key, attempts) — one entry per recognised game.
+    Returns [(IGNORED, None, None)] when no games are found.
     """
     if message.author.bot:
-        return ProcessResult.IGNORED, None, None
+        return [(ProcessResult.IGNORED, None, None)]
 
-    detected = detect_game(message.content)
-    if detected is None:
-        return ProcessResult.IGNORED, None, None
+    detected = detect_all_games(message.content)
+    if not detected:
+        return [(ProcessResult.IGNORED, None, None)]
 
-    config, puzzle_number, attempts, success = detected
     msg_date = local_date_of(message)
+    results = []
 
-    if puzzle_number != expected_puzzle_number(msg_date, config):
-        return ProcessResult.IGNORED, None, None
+    for config, puzzle_number, attempts, success in detected:
+        if puzzle_number != expected_puzzle_number(msg_date, config):
+            continue
 
-    stored = db.store_result(
-        str(message.author.id),
-        message.author.display_name,
-        config.key,
-        msg_date,
-        puzzle_number,
-        attempts,
-        success,
-    )
-    return (ProcessResult.STORED if stored else ProcessResult.DUPLICATE), config.key, attempts
+        stored = db.store_result(
+            str(message.author.id),
+            message.author.display_name,
+            config.key,
+            msg_date,
+            puzzle_number,
+            attempts,
+            success,
+        )
+        results.append(
+            (ProcessResult.STORED if stored else ProcessResult.DUPLICATE, config.key, attempts)
+        )
+
+    return results if results else [(ProcessResult.IGNORED, None, None)]
 
 
 def calculate_streak(user_id: str, game_key: str) -> int:

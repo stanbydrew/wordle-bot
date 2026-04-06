@@ -46,13 +46,21 @@ async def on_message(message):
     if message.channel.id != WORDLE_CHANNEL_ID:
         return
 
-    result, game_key, attempts = game_service.process_message(message)
+    results = game_service.process_message(message)
 
-    if result == game_service.ProcessResult.STORED:
+    any_stored = False
+    any_duplicate = False
+    for result, game_key, attempts in results:
+        if result == game_service.ProcessResult.STORED:
+            any_stored = True
+            emoji = ATTEMPT_EMOJI.get(attempts, "🪦") if attempts is not None else "🪦"
+            await message.add_reaction(emoji)
+        elif result == game_service.ProcessResult.DUPLICATE:
+            any_duplicate = True
+
+    if any_stored:
         await message.add_reaction("✅")
-        emoji = ATTEMPT_EMOJI.get(attempts, "🪦") if attempts is not None else "🪦"
-        await message.add_reaction(emoji)
-    elif result == game_service.ProcessResult.DUPLICATE:
+    if any_duplicate:
         await message.add_reaction("❌")
 
     db.set_last_message_id(message.id)
@@ -80,9 +88,9 @@ async def on_ready():
     newest_id = last_id or 0
     stored = 0
     async for message in channel.history(limit=None, after=after, oldest_first=True):
-        result, _, _ = game_service.process_message(message)
-        if result == game_service.ProcessResult.STORED:
-            stored += 1
+        for result, _, _ in game_service.process_message(message):
+            if result == game_service.ProcessResult.STORED:
+                stored += 1
         if message.id > newest_id:
             newest_id = message.id
 
