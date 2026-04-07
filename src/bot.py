@@ -30,6 +30,7 @@ ATTEMPT_EMOJI = {
     5: "😬",  # sweaty
     6: "💀",  # that was close
 }
+EMOJI_GAMES = {"wordle", "rowordle", "nerdle"}
 
 
 # ── Events ────────────────────────────────────────────────────────────────────
@@ -54,9 +55,13 @@ async def on_message(message):
     for result, game_key, attempts in results:
         if result == game_service.ProcessResult.STORED:
             any_stored = True
-            emoji = ATTEMPT_EMOJI.get(attempts, "🪦") if attempts is not None else "🪦"
-            if emoji not in attempt_emojis:
-                attempt_emojis.append(emoji)
+            if game_key in EMOJI_GAMES:
+                emoji = ATTEMPT_EMOJI.get(attempts, "🪦") if attempts is not None else "🪦"
+                if emoji not in attempt_emojis:
+                    attempt_emojis.append(emoji)
+            elif attempts is None:
+                if "🪦" not in attempt_emojis:
+                    attempt_emojis.append("🪦")
         elif result == game_service.ProcessResult.DUPLICATE:
             any_duplicate = True
 
@@ -110,9 +115,7 @@ async def on_ready():
 @tree.command(name="ranking", description="Show the streak leaderboard for a game")
 @app_commands.describe(game="Which game to show rankings for")
 @app_commands.choices(game=[
-    app_commands.Choice(name="Wordle",   value="wordle"),
-    app_commands.Choice(name="RoWordle", value="rowordle"),
-    app_commands.Choice(name="Nerdle",   value="nerdle"),
+    app_commands.Choice(name=g.display_name, value=g.key) for g in games.ALL_GAMES
 ])
 async def ranking(interaction: discord.Interaction, game: app_commands.Choice[str]):
     if interaction.channel_id != WORDLE_CHANNEL_ID:
@@ -131,7 +134,7 @@ async def ranking(interaction: discord.Interaction, game: app_commands.Choice[st
     lines = [f"**{config.display_name} Streak Leaderboard**", ""]
     for i, (username, streak, avg) in enumerate(rows, 1):
         suffix = "day" if streak == 1 else "days"
-        avg_str = f" · avg {avg:.2f}/6" if avg is not None else ""
+        avg_str = f" · avg {avg:.2f}/{config.max_attempts}" if avg is not None else ""
         lines.append(f"{i}. **{username}** — {streak} {suffix}{avg_str}")
 
     await interaction.followup.send("\n".join(lines))
@@ -154,7 +157,7 @@ async def mystats(interaction: discord.Interaction):
         if s["total"] == 0:
             continue
         has_any = True
-        avg_str = f"{s['avg_attempts']:.2f}/6" if s["avg_attempts"] is not None else "N/A"
+        avg_str = f"{s['avg_attempts']:.2f}/{s['max_attempts']}" if s["avg_attempts"] is not None else "N/A"
         lines += [
             "",
             f"**{s['display_name']}**",

@@ -1,4 +1,5 @@
 import os
+import re
 from datetime import date, timedelta, datetime
 from enum import Enum
 from zoneinfo import ZoneInfo
@@ -34,11 +35,11 @@ def expected_puzzle_number(for_date: date, config: GameConfig) -> int:
     return (for_date - config.epoch).days
 
 
-# ── Parsing ───────────────────────────────────────────────────────────────────
+# ── Standard parser ──────────────────────────────────────────────────────────
 
 def parse_result(content: str, config: GameConfig) -> tuple[int, int | None, bool] | None:
     """
-    Parse a game result for a specific game config.
+    Parse a game result using the standard regex+grid pattern.
     Returns (puzzle_number, attempts, success) or None if not a match.
     attempts is None for failed puzzles (X/6).
     """
@@ -47,7 +48,7 @@ def parse_result(content: str, config: GameConfig) -> tuple[int, int | None, boo
         return None
 
     try:
-        puzzle_number = int(match.group(1).replace(",", ""))
+        puzzle_number = int(match.group(1).replace(",", "").replace(".", ""))
     except ValueError:
         return None
 
@@ -92,13 +93,105 @@ def parse_result(content: str, config: GameConfig) -> tuple[int, int | None, boo
     return puzzle_number, attempts, success
 
 
+# ── Custom parsers ───────────────────────────────────────────────────────────
+
+_CUSTOM_PARSERS: dict[str, callable] = {}
+
+
+def _custom_parser(key: str):
+    """Register a custom parser for a game key."""
+    def decorator(fn):
+        _CUSTOM_PARSERS[key] = fn
+        return fn
+    return decorator
+
+
+# Quordle — 2×2 grid of number-emojis (solved) or 🟥 (failed)
+_QUORDLE_HEADER = re.compile(r"Daily Quordle\s+(\d+)")
+_QUORDLE_CELL = re.compile(r"🟥|[1-9]\ufe0f\u20e3")
+
+
+@_custom_parser("quordle")
+def _parse_quordle(content: str):
+    m = _QUORDLE_HEADER.search(content)
+    if not m:
+        return None
+    puzzle_number = int(m.group(1))
+    cells = _QUORDLE_CELL.findall(content[m.end():])
+    if len(cells) < 4:
+        return None
+    cells = cells[:4]
+    if any(c == "🟥" for c in cells):
+        return puzzle_number, None, False
+    return puzzle_number, max(int(c[0]) for c in cells), True
+
+
+# Owdle — date-based; convert the result date to days-since-epoch so existing
+# puzzle-number validation works without any changes to process_message.
+_OWDLE_HERO_HEADER = re.compile(r"Owdle Hero (\d{4}-\d{2}-\d{2}) ([✅❌]) \((\d+) tries\)")
+_OWDLE_CONV_HEADER = re.compile(r"Owdle Conversation (\d{4}-\d{2}-\d{2}) ([✅❌]) \((\d+) tries\)")
+
+
+def _parse_owdle(content: str, header_pattern: re.Pattern):
+    m = header_pattern.search(content)
+    if not m:
+        return None
+    game_date = date.fromisoformat(m.group(1))
+    puzzle_number = (game_date - games.OWDLE_EPOCH).days
+    success = m.group(2) == "✅"
+    attempts = int(m.group(3)) if success else None
+    return puzzle_number, attempts, success
+
+
+@_custom_parser("owdle_hero")
+def _parse_owdle_hero(content: str):
+    return _parse_owdle(content, _OWDLE_HERO_HEADER)
+
+
+@_custom_parser("owdle_conversation")
+def _parse_owdle_conversation(content: str):
+    return _parse_owdle(content, _OWDLE_CONV_HEADER)
+
+
+# Doctordle — single grid line: 🏥 followed by 🟥 (wrong) / 🟩 (correct) / ⬛ (remaining)
+_DOCTORDLE_HEADER = re.compile(r"Doctordle #(\d+)")
+_DOCTORDLE_CELLS = {"🟥", "🟩", "⬛"}
+
+
+@_custom_parser("doctordle")
+def _parse_doctordle(content: str):
+    m = _DOCTORDLE_HEADER.search(content)
+    if not m:
+        return None
+    puzzle_number = int(m.group(1))
+    grid_line = None
+    for line in content[m.end():].splitlines():
+        stripped = line.strip()
+        if stripped.startswith("🏥"):
+            grid_line = stripped
+            break
+    if not grid_line:
+        return None
+    cells = [c for c in grid_line.split() if c in _DOCTORDLE_CELLS]
+    active = [c for c in cells if c != "⬛"]
+    if not active:
+        return None
+    success = active[-1] == "🟩"
+    attempts = len(active) if success else None
+    return puzzle_number, attempts, success
+
+
+# ── Detection ────────────────────────────────────────────────────────────────
+
 def detect_all_games(content: str) -> list[tuple[GameConfig, int, int | None, bool]]:
     """Try all game configs, return all matches found in the message."""
-    return [
-        (config, *result)
-        for config in games.ALL_GAMES
-        if (result := parse_result(content, config)) is not None
-    ]
+    results = []
+    for config in games.ALL_GAMES:
+        parser = _CUSTOM_PARSERS.get(config.key)
+        result = parser(content) if parser else parse_result(content, config)
+        if result is not None:
+            results.append((config, *result))
+    return results
 
 
 # ── Core logic ────────────────────────────────────────────────────────────────
@@ -150,7 +243,7 @@ def calculate_streak(user_id: str, game_key: str) -> int:
     yesterday = today - timedelta(days=1)
     if today in dates:
         check = today
-    elif yesterday in dates:
+    elif yesterday in dates and not db.has_result(user_id, game_key, today):
         check = yesterday
     else:
         return 0
@@ -185,6 +278,7 @@ def get_user_stats(user_id: str) -> dict[str, dict]:
         total, wins = db.get_game_counts(user_id, config.key)
         result[config.key] = {
             "display_name": config.display_name,
+            "max_attempts": config.max_attempts,
             "total": total,
             "wins": wins,
             "win_rate": wins / total if total else 0.0,
@@ -202,7 +296,7 @@ def get_rankings(game_key: str) -> list[tuple[str, int, float | None]]:
         (username, calculate_streak(user_id, game_key), db.get_average_attempts(user_id, game_key))
         for user_id, username in users
     ]
-    rows.sort(key=lambda x: x[1], reverse=True)
+    rows.sort(key=lambda x: (-x[1], x[2] if x[2] is not None else float("inf")))
     return rows
 
 

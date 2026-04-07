@@ -150,6 +150,16 @@ def get_average_attempts(user_id: str, game: str) -> float | None:
     return row[0] if row and row[0] is not None else None
 
 
+def has_result(user_id: str, game: str, result_date: date) -> bool:
+    """Returns True if the user has any result (win or loss) for the given date."""
+    with _conn() as conn:
+        row = conn.execute(
+            "SELECT 1 FROM game_results WHERE user_id = ? AND game = ? AND date = ?",
+            (user_id, game, result_date.isoformat()),
+        ).fetchone()
+    return row is not None
+
+
 def get_users_at_risk(game: str, yesterday: date, today: date) -> list[tuple[str, str]]:
     """
     Returns (user_id, username) for users who completed yesterday (active streak)
