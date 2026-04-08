@@ -123,16 +123,19 @@ async def ranking(interaction: discord.Interaction, game: app_commands.Choice[st
         await interaction.followup.send(f"No {config.display_name} results found yet.")
         return
 
-    lines = [f"**{config.display_name} Streak Leaderboard**", ""]
+    MEDALS = {1: "🥇", 2: "🥈", 3: "🥉"}
+
+    lines = [f"🏆 **{config.display_name} Streak Leaderboard**", "─────────────────────────", ""]
     for i, (username, streak, avg) in enumerate(rows, 1):
-        suffix = "day" if streak == 1 else "days"
+        medal = MEDALS.get(i, f"`{i}.`")
+        streak_str = f"🔥 **{streak}** {'day' if streak == 1 else 'days'}" if streak > 0 else f"❄️ **0** days"
         if avg is None:
             avg_str = ""
         elif config.max_attempts is not None:
-            avg_str = f" · avg {avg:.2f}/{config.max_attempts}"
+            avg_str = f"  ·  🎯 avg **{avg:.2f}**/{config.max_attempts}"
         else:
-            avg_str = f" · avg {avg:.2f}"
-        lines.append(f"{i}. **{username}** — {streak} {suffix}{avg_str}")
+            avg_str = f"  ·  🎯 avg **{avg:.2f}**"
+        lines.append(f"{medal} **{username}** — {streak_str}{avg_str}")
 
     await interaction.followup.send("\n".join(lines))
 
@@ -147,7 +150,7 @@ async def mystats(interaction: discord.Interaction):
 
     stats = game_service.get_user_stats(str(interaction.user.id))
 
-    lines = ["**Your Stats**"]
+    lines = ["📊 **Your Stats**", "─────────────────────────"]
     has_any = False
 
     for game_key, s in stats.items():
@@ -157,14 +160,15 @@ async def mystats(interaction: discord.Interaction):
         if s["avg_attempts"] is None:
             avg_str = "N/A"
         elif s["max_attempts"] is not None:
-            avg_str = f"{s['avg_attempts']:.2f}/{s['max_attempts']}"
+            avg_str = f"**{s['avg_attempts']:.2f}**/{s['max_attempts']}"
         else:
-            avg_str = f"{s['avg_attempts']:.2f}"
+            avg_str = f"**{s['avg_attempts']:.2f}**"
+        streak_str = f"🔥 **{s['streak']}**" if s["streak"] > 0 else f"❄️ **0**"
         lines += [
             "",
-            f"**{s['display_name']}**",
-            f"Streak: **{s['streak']}** days · Best: **{s['best_streak']}** days",
-            f"Avg guesses: **{avg_str}** · Win rate: **{s['win_rate']:.1%}** ({s['wins']}/{s['total']})",
+            f"🎮 **{s['display_name']}**",
+            f"{streak_str} streak  ·  ⭐ best **{s['best_streak']}** days",
+            f"🎯 avg {avg_str}  ·  ✅ win rate **{s['win_rate']:.1%}** ({s['wins']}/{s['total']})",
         ]
 
     if not has_any:
