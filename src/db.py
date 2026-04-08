@@ -160,6 +160,38 @@ def has_result(user_id: str, game: str, result_date: date) -> bool:
     return row is not None
 
 
+def get_all_successful_dates(game: str) -> dict[str, set[date]]:
+    """Returns {user_id: set of successful dates} for all users in a game. Single query."""
+    with _conn() as conn:
+        rows = conn.execute("""
+            SELECT user_id, date FROM game_results WHERE game = ? AND success = 1
+        """, (game,)).fetchall()
+    result: dict[str, set[date]] = {}
+    for r in rows:
+        result.setdefault(r["user_id"], set()).add(date.fromisoformat(r["date"]))
+    return result
+
+
+def get_all_average_attempts(game: str) -> dict[str, float | None]:
+    """Returns {user_id: avg_attempts} for all users in a game. Single query."""
+    with _conn() as conn:
+        rows = conn.execute("""
+            SELECT user_id, AVG(attempts) as avg_att FROM game_results
+            WHERE game = ? AND success = 1
+            GROUP BY user_id
+        """, (game,)).fetchall()
+    return {r["user_id"]: r["avg_att"] for r in rows}
+
+
+def get_users_with_result(game: str, result_date: date) -> set[str]:
+    """Returns user_ids who have any result (win or loss) for the given game and date."""
+    with _conn() as conn:
+        rows = conn.execute("""
+            SELECT user_id FROM game_results WHERE game = ? AND date = ?
+        """, (game, result_date.isoformat())).fetchall()
+    return {r["user_id"] for r in rows}
+
+
 def get_users_at_risk(game: str, yesterday: date, today: date) -> list[tuple[str, str]]:
     """
     Returns (user_id, username) for users who completed yesterday (active streak)

@@ -1,21 +1,13 @@
-import os
 from datetime import datetime
-from zoneinfo import ZoneInfo
 
 import discord
 from discord import app_commands
 from discord.ext import tasks
-from dotenv import load_dotenv
 
 import db
 import games
 import game_service
-
-load_dotenv()
-
-TZ = ZoneInfo(os.environ["TIMEZONE"])
-WORDLE_CHANNEL_ID = int(os.environ["WORDLE_CHANNEL_ID"])
-GUILD_ID = int(os.environ["GUILD_ID"])
+from config import TZ, WORDLE_CHANNEL_ID, GUILD_ID, DISCORD_TOKEN
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -134,7 +126,12 @@ async def ranking(interaction: discord.Interaction, game: app_commands.Choice[st
     lines = [f"**{config.display_name} Streak Leaderboard**", ""]
     for i, (username, streak, avg) in enumerate(rows, 1):
         suffix = "day" if streak == 1 else "days"
-        avg_str = f" · avg {avg:.2f}/{config.max_attempts}" if avg is not None else ""
+        if avg is None:
+            avg_str = ""
+        elif config.max_attempts is not None:
+            avg_str = f" · avg {avg:.2f}/{config.max_attempts}"
+        else:
+            avg_str = f" · avg {avg:.2f}"
         lines.append(f"{i}. **{username}** — {streak} {suffix}{avg_str}")
 
     await interaction.followup.send("\n".join(lines))
@@ -157,7 +154,12 @@ async def mystats(interaction: discord.Interaction):
         if s["total"] == 0:
             continue
         has_any = True
-        avg_str = f"{s['avg_attempts']:.2f}/{s['max_attempts']}" if s["avg_attempts"] is not None else "N/A"
+        if s["avg_attempts"] is None:
+            avg_str = "N/A"
+        elif s["max_attempts"] is not None:
+            avg_str = f"{s['avg_attempts']:.2f}/{s['max_attempts']}"
+        else:
+            avg_str = f"{s['avg_attempts']:.2f}"
         lines += [
             "",
             f"**{s['display_name']}**",
@@ -202,4 +204,4 @@ async def streak_warning():
     )
 
 
-client.run(os.environ["DISCORD_TOKEN"])
+client.run(DISCORD_TOKEN)

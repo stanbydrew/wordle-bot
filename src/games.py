@@ -8,7 +8,7 @@ class GameConfig:
     key: str
     display_name: str
     epoch: date | None
-    max_attempts: int = 6
+    max_attempts: int | None = 6
     pattern: re.Pattern | None = None
     grid_emojis: frozenset = frozenset()
     grid_width: int = 0
@@ -62,14 +62,14 @@ OWDLE_HERO = GameConfig(
     key="owdle_hero",
     display_name="Owdle Hero",
     epoch=OWDLE_EPOCH,
-    max_attempts=12,
+    max_attempts=None,
 )
 
 OWDLE_CONVERSATION = GameConfig(
     key="owdle_conversation",
     display_name="Owdle Conversation",
     epoch=OWDLE_EPOCH,
-    max_attempts=12,
+    max_attempts=None,
 )
 
 DOCTORDLE = GameConfig(
