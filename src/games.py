@@ -78,11 +78,30 @@ DOCTORDLE = GameConfig(
     epoch=_epoch(date(2026, 4, 6), 264),
 )
 
+POLYGONLE = GameConfig(
+    key="polygonle",
+    display_name="Polygonle",
+    epoch=_epoch(date(2026, 4, 11), 1350),
+    pattern=re.compile(r"^#Polygonle (\d+) ([X\d])/6", re.MULTILINE),
+    grid_emojis=frozenset({"⬛", "⬜", "🟨", "🟩"}),
+    grid_width=7,
+)
+
+POLYGONLE_MINI = GameConfig(
+    key="polygonle_mini",
+    display_name="PolygonleMini",
+    epoch=_epoch(date(2026, 4, 11), 1104),
+    pattern=re.compile(r"^#PolygonleMini (\d+) ([X\d])/6", re.MULTILINE),
+    grid_emojis=frozenset({"⬛", "⬜", "🟨", "🟩"}),
+    grid_width=5,
+)
+
 
 ALL_GAMES: list[GameConfig] = [
     WORDLE, ROWORDLE, NERDLE,
     QUORDLE,
     OWDLE_HERO, OWDLE_CONVERSATION,
     DOCTORDLE,
+    POLYGONLE, POLYGONLE_MINI,
 ]
 GAMES_BY_KEY: dict[str, GameConfig] = {g.key: g for g in ALL_GAMES}
