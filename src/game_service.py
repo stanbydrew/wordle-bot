@@ -17,7 +17,8 @@ _GAME_HINT_EMOJIS = frozenset({"🟩", "🟨", "⬛", "⬜", "🟪", "🟥", "�
 class ProcessResult(Enum):
     STORED = "stored"        # first valid result for the day, saved to DB
     DUPLICATE = "duplicate"  # valid result but user already submitted today
-    IGNORED = "ignored"      # not a recognised game message or wrong puzzle number
+    IGNORED = "ignored"      # not a recognised game message
+    WRONG_DAY = "wrong_day"  # recognised result but puzzle number doesn't match today
 
 
 # ── Date helpers ──────────────────────────────────────────────────────────────
@@ -62,6 +63,7 @@ def process_message(message) -> list[tuple[ProcessResult, str | None, int | None
 
     for config, puzzle_number, attempts, success in detected:
         if puzzle_number != expected_puzzle_number(msg_date, config):
+            results.append((ProcessResult.WRONG_DAY, config.key, attempts))
             continue
 
         stored = db.store_result(

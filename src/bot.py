@@ -44,6 +44,7 @@ async def on_message(message):
     attempt_emojis = []
     any_stored = False
     any_duplicate = False
+    any_wrong_day = False
     for result, game_key, attempts in results:
         if result == game_service.ProcessResult.STORED:
             any_stored = True
@@ -56,12 +57,14 @@ async def on_message(message):
                     attempt_emojis.append("🪦")
         elif result == game_service.ProcessResult.DUPLICATE:
             any_duplicate = True
+        elif result == game_service.ProcessResult.WRONG_DAY:
+            any_wrong_day = True
 
     for emoji in attempt_emojis:
         await message.add_reaction(emoji)
     if any_stored:
         await message.add_reaction("✅")
-    if any_duplicate:
+    if any_duplicate or any_wrong_day:
         await message.add_reaction("❌")
 
     db.set_last_message_id(message.id)
