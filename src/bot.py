@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 
 import discord
@@ -8,6 +9,8 @@ import db
 import games
 import game_service
 from config import TZ, WORDLE_CHANNEL_ID, GUILD_ID, DISCORD_TOKEN
+
+logger = logging.getLogger(__name__)
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -61,11 +64,20 @@ async def on_message(message):
             any_wrong_day = True
 
     for emoji in attempt_emojis:
-        await message.add_reaction(emoji)
+        try:
+            await message.add_reaction(emoji)
+        except discord.HTTPException as e:
+            logger.error("Failed to add attempt emoji %s to message %s: %s", emoji, message.id, e)
     if any_stored:
-        await message.add_reaction("✅")
+        try:
+            await message.add_reaction("✅")
+        except discord.HTTPException as e:
+            logger.error("Failed to add ✅ to message %s: %s", message.id, e)
     if any_duplicate or any_wrong_day:
-        await message.add_reaction("❌")
+        try:
+            await message.add_reaction("❌")
+        except discord.HTTPException as e:
+            logger.error("Failed to add ❌ to message %s: %s", message.id, e)
 
     db.set_last_message_id(message.id)
 
@@ -77,17 +89,17 @@ async def on_ready():
     guild = discord.Object(id=GUILD_ID)
     tree.copy_global_to(guild=guild)
     await tree.sync(guild=guild)
-    print(f"Logged in as {client.user} — slash commands synced.")
+    logger.info("Bot started at %s — logged in as %s", datetime.now(TZ).isoformat(), client.user)
 
     channel = client.get_channel(WORDLE_CHANNEL_ID)
     if channel is None:
-        print(f"ERROR: channel {WORDLE_CHANNEL_ID} not found — check WORDLE_CHANNEL_ID in .env")
+        logger.error("Channel %s not found — check WORDLE_CHANNEL_ID in .env", WORDLE_CHANNEL_ID)
         return
 
     last_id = db.get_last_message_id()
     after = discord.Object(id=last_id) if last_id else None
     label = "incremental" if last_id else "full"
-    print(f"Scanning channel history ({label})...")
+    logger.info("Scanning channel history (%s)...", label)
 
     newest_id = last_id or 0
     stored = 0
@@ -101,7 +113,7 @@ async def on_ready():
     if newest_id != (last_id or 0):
         db.set_last_message_id(newest_id)
 
-    print(f"Scan complete — {stored} new result(s) stored.")
+    logger.info("Scan complete — %d new result(s) stored.", stored)
     streak_warning.start()
 
 
@@ -210,5 +222,12 @@ async def streak_warning():
         f"Your Wordle streak is at risk — don't break the chain!"
     )
 
+
+logging.basicConfig(
+    level=logging.WARNING,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    handlers=[logging.StreamHandler()],
+)
+logging.getLogger(__name__).setLevel(logging.INFO)
 
 client.run(DISCORD_TOKEN)
