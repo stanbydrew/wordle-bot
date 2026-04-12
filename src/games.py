@@ -82,7 +82,7 @@ POLYGONLE = GameConfig(
     key="polygonle",
     display_name="Polygonle",
     epoch=_epoch(date(2026, 4, 11), 1350),
-    pattern=re.compile(r"^#Polygonle (\d+) ([X\d])/6", re.MULTILINE),
+    pattern=re.compile(r"^#Polygonle (\d+) ([X\d])/6\S*", re.MULTILINE),
     grid_emojis=frozenset({"⬛", "⬜", "🟨", "🟩"}),
     grid_width=7,
 )
@@ -91,7 +91,7 @@ POLYGONLE_MINI = GameConfig(
     key="polygonle_mini",
     display_name="PolygonleMini",
     epoch=_epoch(date(2026, 4, 11), 1104),
-    pattern=re.compile(r"^#PolygonleMini (\d+) ([X\d])/6", re.MULTILINE),
+    pattern=re.compile(r"^#PolygonleMini (\d+) ([X\d])/6\S*", re.MULTILINE),
     grid_emojis=frozenset({"⬛", "⬜", "🟨", "🟩"}),
     grid_width=5,
 )
