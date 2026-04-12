@@ -58,6 +58,13 @@ QUORDLE = GameConfig(
     max_attempts=9,
 )
 
+QUORDLE_EXTREME = GameConfig(
+    key="quordle_extreme",
+    display_name="Quordle Extreme",
+    epoch=_epoch(date(2026, 4, 12), 622),
+    max_attempts=9,
+)
+
 OWDLE_HERO = GameConfig(
     key="owdle_hero",
     display_name="Owdle Hero",
@@ -98,7 +105,7 @@ POLYGONLE_MINI = GameConfig(
 
 ALL_GAMES: list[GameConfig] = [
     WORDLE, ROWORDLE, NERDLE,
-    QUORDLE,
+    QUORDLE, QUORDLE_EXTREME,
     OWDLE_HERO, OWDLE_CONVERSATION,
     DOCTORDLE,
     POLYGONLE, POLYGONLE_MINI,

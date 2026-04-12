@@ -7,11 +7,12 @@ import games
 # 2×2 grid of number-emojis (solved) or 🟥 (failed)
 
 _QUORDLE_HEADER = re.compile(r"Daily Quordle\s+(\d+)")
+_QUORDLE_EXTREME_HEADER = re.compile(r"Daily Extreme\s+(\d+)")
 _QUORDLE_CELL = re.compile(r"🟥|[1-9]\ufe0f\u20e3")
 
 
-def parse_quordle(content: str) -> tuple[int, int | None, bool] | None:
-    m = _QUORDLE_HEADER.search(content)
+def _parse_quordle_variant(content: str, header: re.Pattern) -> tuple[int, int | None, bool] | None:
+    m = header.search(content)
     if not m:
         return None
     puzzle_number = int(m.group(1))
@@ -22,6 +23,14 @@ def parse_quordle(content: str) -> tuple[int, int | None, bool] | None:
     if any(c == "🟥" for c in cells):
         return puzzle_number, None, False
     return puzzle_number, max(int(c[0]) for c in cells), True
+
+
+def parse_quordle(content: str) -> tuple[int, int | None, bool] | None:
+    return _parse_quordle_variant(content, _QUORDLE_HEADER)
+
+
+def parse_quordle_extreme(content: str) -> tuple[int, int | None, bool] | None:
+    return _parse_quordle_variant(content, _QUORDLE_EXTREME_HEADER)
 
 
 # ── Owdle ─────────────────────────────────────────────────────────────────────
@@ -84,6 +93,7 @@ def parse_doctordle(content: str) -> tuple[int, int | None, bool] | None:
 
 CUSTOM_PARSERS: dict[str, callable] = {
     "quordle": parse_quordle,
+    "quordle_extreme": parse_quordle_extreme,
     "owdle_hero": parse_owdle_hero,
     "owdle_conversation": parse_owdle_conversation,
     "doctordle": parse_doctordle,
