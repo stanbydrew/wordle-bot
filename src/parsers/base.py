@@ -35,8 +35,8 @@ def parse_result(content: str, config: GameConfig) -> tuple[int, int | None, boo
         elif grid_lines:
             break  # stop at first non-grid line after grid has started
     if grid_lines:
-        # Each row must have exactly grid_width cells
-        if any(
+        # Each row must have exactly grid_width cells (skip check if grid_width is 0)
+        if config.grid_width and any(
             len([c for c in line if c in config.grid_emojis]) != config.grid_width
             for line in grid_lines
         ):
