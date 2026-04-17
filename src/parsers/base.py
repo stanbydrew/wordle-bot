@@ -7,6 +7,10 @@ def parse_result(content: str, config: GameConfig) -> tuple[int, int | None, boo
     Returns (puzzle_number, attempts, success) or None if not a match.
     attempts is None for failed puzzles (X/6).
     """
+    # Strip Unicode variation selectors (U+FE0E / U+FE0F) that some games append
+    # to digits and emojis, which would otherwise break pattern matching.
+    content = content.replace("\uFE0E", "").replace("\uFE0F", "")
+
     match = config.pattern.search(content)
     if not match:
         return None
@@ -17,7 +21,7 @@ def parse_result(content: str, config: GameConfig) -> tuple[int, int | None, boo
         return None
 
     attempts_str = match.group(2)
-    if attempts_str == "X":
+    if attempts_str in ("X", "😔") or attempts_str == "0":
         attempts, success = None, False
     else:
         attempts = int(attempts_str)
